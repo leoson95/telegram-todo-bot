@@ -28,6 +28,25 @@ function deleteMessage($chat_id, $msg_id) {
 }
 
 /**
+ * دریافت لیست دسته‌بندی‌های کاربر
+ */
+function getUserCategories($chat_id, $db) {
+    $stmt = $db->prepare("SELECT name FROM categories WHERE chat_id = ?");
+    $stmt->execute([$chat_id]);
+    $cats = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (empty($cats)) {
+        // ایجاد دسته‌بندی‌های پیش‌فرض
+        $defaultCats = ['🔴 فوری', '💅 کارای سالن', '🛒 خریدای سالن', '🏠 کارای خونه', '🛍️ خریدای خونه', '👤 کارای شخصی'];
+        foreach ($defaultCats as $cat) {
+            $db->prepare("INSERT INTO categories (chat_id, name) VALUES (?, ?)")->execute([$chat_id, $cat]);
+        }
+        return $defaultCats;
+    }
+    return $cats;
+}
+
+/**
  * دریافت و ایجاد نمای لیست کارهای اصلی کاربر
  */
 function renderMainList($chat_id, $db) {
@@ -35,14 +54,19 @@ function renderMainList($chat_id, $db) {
     $stmt->execute([$chat_id]);
     $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $categories = [
-        '🔴 فوری' => [], '💅 کارای سالن' => [], '🛒 خریدای سالن' => [],
-        '🏠 کارای خونه' => [], '🛍️ خریدای خونه' => [], '👤 کارای شخصی' => []
-    ];
+    $userCats = getUserCategories($chat_id, $db);
+    $categories = [];
+    foreach ($userCats as $cat) {
+        $categories[$cat] = [];
+    }
 
     foreach ($tasks as $task) {
         if (array_key_exists($task['category'], $categories)) {
             $categories[$task['category']][] = $task;
+        } else {
+             // در صورتی که دسته‌بندی قبلی پاک شده باشد
+             if(!isset($categories['سایر'])) $categories['سایر'] = [];
+             $categories['سایر'][] = $task;
         }
     }
 
@@ -54,7 +78,7 @@ function renderMainList($chat_id, $db) {
         $count = count($catTasks);
         if ($count > 0) {
             $hasTasks = true;
-            $textOutput .= "📂 <b>" . $catName . "</b> │ 📋 <code>" . $count . " کار</code>\n\n\n";
+            $textOutput .= "📂 <b>" . htmlspecialchars($catName) . "</b> │ 📋 <code>" . $count . " کار</code>\n\n\n";
             foreach ($catTasks as $t) {
                 $status = (!empty($t['next_trigger'])) ? " ⏰" : "";
                 $textOutput .= "▫️ " . htmlspecialchars($t['text']) . $status . "\n";
@@ -68,7 +92,10 @@ function renderMainList($chat_id, $db) {
         $textOutput .= "━━━━━━━━━━━━━━━━━━━━━\n\n";
     }
 
-    $keyboard = [[['text' => "⚡ مدیریت و اتمام کارها", 'callback_data' => "manage_start"]]];
+    $keyboard = [
+        [['text' => "⚡ مدیریت و اتمام کارها", 'callback_data' => "manage_start"]],
+        [['text' => "⚙️ تنظیمات دسته‌بندی‌ها", 'callback_data' => "manage_categories"]]
+    ];
     return ['text' => $textOutput, 'keyboard' => $keyboard];
 }
 
