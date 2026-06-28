@@ -46,6 +46,13 @@ try {
         state TEXT,
         temp_text TEXT
     )");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chat_id TEXT,
+        name TEXT,
+        UNIQUE(chat_id, name)
+    )");
 } catch (PDOException $e) {
     error_log("Database error: " . $e->getMessage());
     exit("Database connection failed. Please check the configuration.");
